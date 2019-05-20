@@ -1,6 +1,8 @@
 import requests
 import json
 import re
+import time
+from tqdm import tqdm
 from bs4 import BeautifulSoup
 
 USER_URL = 'https://www.instagram.com/'
@@ -19,6 +21,11 @@ def get_shared_data(url: str):
 
     # Get sourcecode from page
     source = requests.get(url)
+    
+    if source.status_code != 200:
+        # ToDo Exception
+        return None
+
     soup = BeautifulSoup(source.text, "html.parser")
 
     # Search for shared data and parse to json
@@ -26,6 +33,8 @@ def get_shared_data(url: str):
         if item.string is not None and item.string.startswith('window._sharedData'):
             content = item.string.replace("window._sharedData = ", "", 1)[:-1]
             return json.loads(content)
+
+    # ToDo Exception if no shared data found
 
 def get_tags_from_post(post_url: str):
     """Reads all hashtags from instagram post.
@@ -65,6 +74,10 @@ def get_tags_from_user(user: str, num_of_posts: int = 9):
     
     # Read shared Data
     data = get_shared_data(USER_URL + user)
+    if data is None:
+        print("Unable to load user " + user + "!")
+        return None
+
     posts = data['entry_data']['ProfilePage'][0]['graphql']['user']['edge_owner_to_timeline_media']['edges']
 
     # Read tags of recent posts
@@ -88,9 +101,12 @@ def get_tags_from_tag(tag: str, top_posts: bool = False, num_of_posts: int = 9):
     Returns:
         [str] -- List of used hashtags.
     """
-    
+
     # Read shared Data
     data = get_shared_data(TAG_URL + tag)
+    if data is None:
+        print("Unable to load tag " + tag + "!")
+        return None
     
     # Get Posts
     posts = None
@@ -107,6 +123,10 @@ def get_tags_from_tag(tag: str, top_posts: bool = False, num_of_posts: int = 9):
     tags = []
     for post in posts[:num_of_posts]:
         post_tags = get_tags_from_post(POST_URL + post['node']['shortcode'])
+        if post_tags is None:
+            # ToDO Exception
+            continue
+        
         tags.extend(x for x in post_tags if x not in tags)
 
     return tags
@@ -124,7 +144,33 @@ def get_count_of_posts(tag: str):
 
     # Read shared Data
     data = get_shared_data(TAG_URL + tag)
+    if data is None:
+        # ToDO Exception
+        return None
 
     return int(data['entry_data']['TagPage'][0]['graphql']['hashtag']['edge_hashtag_to_media']['count'])
 
+def get_multiple_count_of_posts(tags: [str]):
+    tags_counts = []
+    t = tqdm(range(len(tags)))
+    for i in t:
+        count = get_count_of_posts(tags[i])
+
+        sleep_time = 1
+        while count is None:
+            t.set_description('Waiting ' + str(sleep_time) + 's...')
+            t.refresh()
+            time.sleep(sleep_time)
+            count = get_count_of_posts(tags[i])
+
+            if count is not None:
+                t.set_description('')
+                t.refresh()
+            else:
+                sleep_time *= 2
+
+        tags_counts.append([tags[i], count])
+        time.sleep(0.5)
+
+    return tags_counts
 
