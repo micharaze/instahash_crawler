@@ -157,6 +157,7 @@ def get_multiple_count_of_posts(tags: [str]):
         count = get_count_of_posts(tags[i])
 
         sleep_time = 1
+        broken = False
         while count is None:
             t.set_description('Waiting ' + str(sleep_time) + 's...')
             t.refresh()
@@ -168,6 +169,14 @@ def get_multiple_count_of_posts(tags: [str]):
                 t.refresh()
             else:
                 sleep_time *= 2
+                if sleep_time > 128:
+                    broken = True
+                    break
+
+        if broken:
+            print(tags[i] + " is broken")
+            continue
+
 
         tags_counts.append([tags[i], count])
         time.sleep(0.5)
